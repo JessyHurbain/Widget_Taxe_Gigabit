@@ -1,0 +1,15 @@
+# Outillage de développement : aucun de ces réglages n'est nécessaire à
+# l'exécution du widget.
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+# Jeu de règles figé ici : sans fichier de configuration, ruff applique le jeu
+# par défaut de sa version, et obéit sinon à un fichier trouvé plus haut dans
+# l'arborescence. La CI doit dépendre du dépôt, pas de la machine.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

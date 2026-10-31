@@ -229,7 +229,11 @@ pour les trois systèmes.
 Chaque script crée un environnement `.build-venv`, y installe PyInstaller et psutil,
 puis compile en un seul fichier (`--onefile --windowed`). L'icône est passée au binaire
 (`assets/logo.ico` sous Windows, `assets/logo.icns` sous macOS) et `assets/logo.png`
-est embarqué dans le binaire pour la fenêtre. PyInstaller ne fait pas de
+est embarqué dans le binaire pour la fenêtre.
+
+Les calculs et la mémoire d'état sont couverts par des tests (`pytest -q`, aucun
+serveur graphique requis) et vérifiés par le job `tests` de la CI, avec `ruff`
+pour le style. PyInstaller ne fait pas de
 compilation croisée : un binaire Windows se produit sous Windows, un binaire macOS
 sous macOS.
 

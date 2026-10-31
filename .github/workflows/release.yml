@@ -10,6 +10,22 @@ permissions:
   contents: write
 
 jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tk système (les tests importent le module, qui importe tkinter)
+        run: sudo apt-get update && sudo apt-get install -y python3-tk python3-venv
+      - name: Installer pytest et ruff
+        run: |
+          /usr/bin/python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --upgrade pip
+          /tmp/venv/bin/pip install psutil pytest ruff
+      - name: Style
+        run: /tmp/venv/bin/ruff check .
+      - name: Tests
+        run: /tmp/venv/bin/python -m pytest -q
+
   linux:
     runs-on: ubuntu-22.04
     steps:

@@ -174,7 +174,14 @@ def fmt_debit(octets_par_s: float) -> str:
     while v >= 1024.0 and i < len(UNITES) - 1:
         v /= 1024.0
         i += 1
-    return f"{v:5.2f} {UNITES[i]}".replace(".", ",")
+    # Deux décimales suffisent presque toujours, mais 3 ou 4 chiffres avant la
+    # virgule font déborder le champ : on retire alors des décimales, plutôt
+    # que de laisser le widget changer de largeur à chaque pic de trafic.
+    for decimales in (2, 1, 0):
+        nombre = f"{v:5.{decimales}f}"
+        if len(nombre) == 5:
+            break
+    return f"{nombre} {UNITES[i]}".replace(".", ",")
 
 
 def fmt_go(go: float) -> str:
@@ -297,6 +304,38 @@ def dossier_etat() -> str:
 FICHIER_ETAT = os.path.join(dossier_etat(), "etat.json")
 
 
+VERROU = None      # garde le verrou d'instance ouvert pendant toute la session
+
+
+def verrouiller_instance() -> bool:
+    """Vrai si cette instance est seule, faux si une autre tourne déjà.
+
+    Verrou noyau plutôt qu'un fichier de PID : il disparaît avec le processus,
+    donc un plantage ne condamne pas les lancements suivants. Deux instances
+    tiendraient chacune leur cumul en mémoire et écraseraient tour à tour le
+    fichier d'état, en perdant la moitié du trafic mesuré.
+    """
+    global VERROU
+    dossier = dossier_etat()
+    try:
+        os.makedirs(dossier, exist_ok=True)
+        fichier = open(os.path.join(dossier, "instance.lock"), "a+")
+    except OSError:
+        return True                     # dossier inscriptible ? on continue
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(fichier.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fichier.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fichier.close()
+        return False
+    VERROU = fichier                    # libéré à la sortie du processus
+    return True
+
+
 def chemin_ressource(nom_relatif: str) -> str:
     """Chemin d'un fichier joint, y compris dans un binaire PyInstaller (onefile)."""
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -395,14 +434,28 @@ def placer_au_dessus(fenetre: tk.Toplevel, widget: "TaxeGigabit") -> None:
 # -- mémoire sur disque -------------------------------------------------------
 
 def charger_jours() -> dict[str, int]:
-    """Historique {AAAA-MM-JJ: octets d'assiette}, dict vide si absent/corrompu."""
+    """Historique {AAAA-MM-JJ: octets d'assiette}, dict vide si absent/corrompu.
+
+    Le filtrage se fait entrée par entrée : une seule valeur aberrante ne doit
+    pas faire perdre tout l'historique, seulement la ligne illisible.
+    """
     try:
         with open(FICHIER_ETAT, encoding="utf-8") as flux:
             donnees = json.load(flux)
-        jours = donnees.get("jours", {})
-        return {str(j): int(v) for j, v in jours.items() if int(v) > 0}
-    except (OSError, ValueError, TypeError, AttributeError):
+        bruts = donnees.get("jours", {})
+    except (OSError, ValueError, AttributeError):
         return {}
+    if not isinstance(bruts, dict):
+        return {}
+    jours: dict[str, int] = {}
+    for jour, valeur in bruts.items():
+        try:
+            octets = int(valeur)
+        except (TypeError, ValueError):
+            continue
+        if octets > 0:
+            jours[str(jour)] = octets
+    return jours
 
 
 def enregistrer_jours(jours: dict[str, int]) -> None:
@@ -596,7 +649,13 @@ class TaxeGigabit:
         self.debit_down = 0.0
         self.debit_up = 0.0
 
-        self.prev_recv, self.prev_sent = lire_compteurs() or (0, 0)
+        # None = compteurs illisibles au démarrage : le premier échantillon
+        # exploitable servira de référence. Sans cette précaution, le tick
+        # suivant compterait d'un coup tout le trafic depuis le démarrage de
+        # la machine, et l'erreur serait ensuite écrite dans l'état.
+        compteurs = lire_compteurs()
+        self.prev_recv, self.prev_sent = (compteurs if compteurs
+                                          else (None, None))
         self.prev_t = time.monotonic()
         self._taille = None
         self._pos_manuelle = None   # (x, y) choisi à la souris, None = ancrage auto
@@ -750,21 +809,27 @@ class TaxeGigabit:
         c = lire_compteurs()
         if c is not None:
             recv, sent = c
-            d_recv = max(0, recv - self.prev_recv)   # max() : gère les resets
-            d_sent = max(0, sent - self.prev_sent)
+            if self.prev_recv is None:
+                # Première lecture exploitable : elle sert de référence et ne
+                # comptabilise rien, sinon tout le trafic depuis le boot
+                # serait porté au compte du jour.
+                self.prev_recv, self.prev_sent = recv, sent
+            else:
+                d_recv = max(0, recv - self.prev_recv)   # max() : gère les resets
+                d_sent = max(0, sent - self.prev_sent)
 
-            # Assiette du tick : descendant seul, sauf si COMPTER_UPLOAD
-            assiette = d_recv + (d_sent if COMPTER_UPLOAD else 0)
-            jour = date.today().isoformat()
-            if jour != self.jour:                    # passage de minuit
-                self._sauvegarder()                  # on fige la veille
-                self.jour = jour
-            if assiette:
-                self.jours[jour] = self.jours.get(jour, 0) + assiette
+                # Assiette du tick : descendant seul, sauf si COMPTER_UPLOAD
+                assiette = d_recv + (d_sent if COMPTER_UPLOAD else 0)
+                jour = date.today().isoformat()
+                if jour != self.jour:                    # passage de minuit
+                    self._sauvegarder()                  # on fige la veille
+                    self.jour = jour
+                if assiette:
+                    self.jours[jour] = self.jours.get(jour, 0) + assiette
 
-            self.debit_down = LISSAGE * (d_recv / dt) + (1 - LISSAGE) * self.debit_down
-            self.debit_up = LISSAGE * (d_sent / dt) + (1 - LISSAGE) * self.debit_up
-            self.prev_recv, self.prev_sent = recv, sent
+                self.debit_down = LISSAGE * (d_recv / dt) + (1 - LISSAGE) * self.debit_down
+                self.debit_up = LISSAGE * (d_sent / dt) + (1 - LISSAGE) * self.debit_up
+                self.prev_recv, self.prev_sent = recv, sent
         self.prev_t = maintenant
 
         if maintenant - self._derniere_sauvegarde >= SAUVEGARDE_S:
@@ -802,6 +867,10 @@ class TaxeGigabit:
 
 def main():
     activer_dpi()
+    if not verrouiller_instance():
+        print("TaxeGigabit tourne déjà : une seule instance à la fois.",
+              file=sys.stderr)
+        return
     racine = tk.Tk()
     racine.title("TaxeGigabit")
     appliquer_icone(racine)
