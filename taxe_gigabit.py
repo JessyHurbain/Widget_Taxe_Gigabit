@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -290,6 +291,43 @@ def zone_utile(racine: tk.Tk) -> tuple[int, int, int, int]:
     return 0, 0, sw, sh
 
 
+def moniteurs(racine: tk.Tk) -> list[tuple[int, int, int, int]]:
+    """Rectangles (x, y, largeur, hauteur) des moniteurs, si connus.
+
+    Sous X11, la zone utile couvre tout le bureau : avec deux écrans de
+    hauteurs différentes, elle ne dit pas sur lequel on dessine. xrandr le dit.
+    Ailleurs (et sous Wayland), la liste est vide et l'appelant se rabat sur la
+    zone utile.
+    """
+    if not sys.platform.startswith("linux"):
+        return []
+    try:
+        sortie = subprocess.run(["xrandr", "--listmonitors"],
+                                capture_output=True, text=True,
+                                timeout=1, check=False).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rects = []
+    # « 0: +*eDP-1 1920/344x1080/194+1600+0  eDP-1 »
+    motif = re.compile(r"\s*\d+:\s+\S*\s*(\d+)/(\d+)x(\d+)/(\d+)\+(-?\d+)\+(-?\d+)")
+    for ligne in sortie.splitlines():
+        trouve = motif.match(ligne)
+        if trouve:
+            largeur, _, hauteur, _, x, y = (int(v) for v in trouve.groups())
+            rects.append((x, y, largeur, hauteur))
+    return rects
+
+
+def zone_moniteur(racine: tk.Tk, x: int, y: int,
+                  secours: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """Rectangle du moniteur qui contient (x, y), sinon le secours fourni."""
+    for rect in moniteurs(racine):
+        mx, my, mw, mh = rect
+        if mx <= x < mx + mw and my <= y < my + mh:
+            return rect
+    return secours
+
+
 def dossier_etat() -> str:
     """Dossier de l'état, rangé selon la convention de chaque système."""
     if sys.platform == "win32":
@@ -419,17 +457,27 @@ def rendre_deplacable(fenetre: tk.Toplevel, conteneur: tk.Widget,
 
 
 def placer_au_dessus(fenetre: tk.Toplevel, widget: "TaxeGigabit") -> None:
-    """Colle un panneau au-dessus du widget, ou ailleurs s'il n'y a pas la place."""
+    """Colle un panneau au-dessus du widget, sur le moniteur qui le porte.
+
+    Se placer d'après la seule zone utile ne suffit pas : elle couvre tout le
+    bureau, si bien qu'avec deux écrans de hauteurs différentes le panneau peut
+    sortir du plus petit. On raisonne donc dans le rectangle du moniteur du
+    widget, et jamais en dehors.
+    """
     fenetre.update_idletasks()
     w, h = fenetre.winfo_reqwidth(), fenetre.winfo_reqheight()
-    zx, zy, zw, zh = widget._zone
     r = widget.racine
-    x = max(zx, min(r.winfo_x(), zx + zw - w))
-    y = r.winfo_y() - h - 8                      # au-dessus du widget, si possible
-    if y < zy:
-        dessous = r.winfo_y() + r.winfo_height() + 8
-        # On préfère le haut de la zone utile au chevauchement du widget.
-        y = dessous if dessous + h <= zy + zh else zy
+    rx, ry = r.winfo_x(), r.winfo_y()
+    rw, rh = r.winfo_width(), r.winfo_height()
+    mx, my, mw, mh = zone_moniteur(r, rx + rw // 2, ry + rh // 2, widget._zone)
+
+    x = max(mx, min(rx, mx + mw - w))
+    y = ry - h - 8                     # au-dessus du widget, si la place existe
+    if y < my:
+        dessous = ry + rh + 8
+        # Sinon en dessous, sinon en haut du moniteur : jamais hors de l'écran.
+        y = dessous if dessous + h <= my + mh else my
+    y = max(my, min(y, my + mh - h))
     fenetre.geometry(f"{w}x{h}+{x}+{y}")
 
 
@@ -673,7 +721,12 @@ class PanneauAPropos:
         marges = (2 * MARGE_BAS + 2 + 16 + 4 + 8
                   + self.entete.winfo_reqheight()
                   + self.pied.winfo_reqheight())
-        plafond = min(zh, int(self.f.winfo_screenheight() * PART_ECRAN_PANNEAU))
+        r = self.widget.racine
+        _mx, _my, _mw, mh = zone_moniteur(
+            r, r.winfo_x() + r.winfo_width() // 2,
+            r.winfo_y() + r.winfo_height() // 2, self.widget._zone)
+        plafond = min(zh, mh - 2 * MARGE_BAS,
+                      int(self.f.winfo_screenheight() * PART_ECRAN_PANNEAU))
         hauteur_max = max(180, plafond - marges)
         contenu = self.contenu.winfo_reqheight()
         self._defilable = contenu > hauteur_max
