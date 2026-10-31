@@ -421,6 +421,8 @@ def _curseur_fleur(widget: tk.Widget) -> None:
     for enfant in widget.winfo_children():
         if getattr(enfant, "_est_bouton", False):
             continue
+        if isinstance(enfant, tk.Scrollbar):
+            continue                   # la barre garde son curseur de défilement
         _curseur_fleur(enfant)
 
 
@@ -434,8 +436,18 @@ def rendre_deplacable(fenetre: tk.Toplevel, conteneur: tk.Widget,
     etat = {"decalage": None}
 
     def debut(evt):
+        # Les contrôles qui ont leur propre glisser ne déplacent pas la fenêtre :
+        # sans cela, tirer la barre de défilement déplacerait le panneau.
+        if isinstance(evt.widget, (tk.Scrollbar, tk.Scale, tk.Entry, tk.Text)):
+            etat["decalage"] = None
+            return
         etat["decalage"] = (evt.x_root - fenetre.winfo_x(),
                             evt.y_root - fenetre.winfo_y())
+
+    def fin(_evt):
+        # Oublier le glisser au relâchement : sinon, passer au-dessus de la barre
+        # bouton encore enfoncé déplacerait la fenêtre.
+        etat["decalage"] = None
 
     def mouvement(evt):
         if etat["decalage"] is None:
@@ -450,8 +462,10 @@ def rendre_deplacable(fenetre: tk.Toplevel, conteneur: tk.Widget,
         fenetre.geometry(f"+{x}+{y}")
 
     fenetre._drag_debut = debut
+    fenetre._drag_fin = fin
     fenetre._drag_mouvement = mouvement
     fenetre.bind("<Button-1>", debut)
+    fenetre.bind("<ButtonRelease-1>", fin)
     fenetre.bind("<B1-Motion>", mouvement)
     _curseur_fleur(conteneur)
 
