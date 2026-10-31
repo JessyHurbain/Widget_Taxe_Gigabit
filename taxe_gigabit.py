@@ -577,6 +577,7 @@ class PanneauAPropos:
 
     def __init__(self, widget: "TaxeGigabit"):
         self.widget = widget
+        self._defilable = False
         self.f = tk.Toplevel(widget.racine)
         self.f.overrideredirect(True)
         self.f.configure(bg=COULEUR_FOND)
@@ -590,32 +591,96 @@ class PanneauAPropos:
                          highlightbackground=COULEUR_BORDURE, padx=10, pady=8)
         cadre.pack(fill="both", expand=True)
 
-        entete = tk.Frame(cadre, bg=COULEUR_FOND)
-        entete.pack(fill="x")
-        self.lbl_titre = tk.Label(entete, text="à propos · pourquoi ce widget",
+        self.entete = tk.Frame(cadre, bg=COULEUR_FOND)
+        self.entete.pack(fill="x")
+        self.lbl_titre = tk.Label(self.entete, text="à propos · pourquoi ce widget",
                                   font=POLICE_SOURDINE, fg=COULEUR_TEXTE,
                                   bg=COULEUR_FOND, anchor="w")
         self.lbl_titre.pack(side="left")
-        bouton_plat(entete, " × ", self.fermer, COULEUR_ALERTE).pack(side="right")
+        bouton_plat(self.entete, " × ", self.fermer, COULEUR_ALERTE).pack(side="right")
+
+        # Le texte dépasse la hauteur d'un petit écran : il défile dans un
+        # canevas, dont la hauteur est bornée à la zone utile. La barre
+        # n'apparaît que si le contenu ne tient pas.
+        corps = tk.Frame(cadre, bg=COULEUR_FOND)
+        corps.pack(fill="both", expand=True, pady=(4, 0))
+
+        self.zone = tk.Canvas(corps, bg=COULEUR_FOND, highlightthickness=0, bd=0,
+                              width=LARGEUR_APROPOS)
+        self.barre = tk.Scrollbar(corps, orient="vertical", width=9, bd=0,
+                                  command=self.zone.yview,
+                                  bg=COULEUR_BORDURE, troughcolor=COULEUR_FOND,
+                                  activebackground=COULEUR_TEXTE,
+                                  highlightthickness=0, elementborderwidth=0)
+        self.zone.configure(yscrollcommand=self.barre.set)
+        self.zone.pack(side="left", fill="both", expand=True)
+
+        self.contenu = tk.Frame(self.zone, bg=COULEUR_FOND)
+        self._fenetre = self.zone.create_window((0, 0), window=self.contenu,
+                                                anchor="nw")
+        self.contenu.bind("<Configure>", self._contenu_change)
+        self.zone.bind("<Configure>", self._elargir_contenu)
 
         self.sections = []
         for titre, texte in APROPOS + (section_exemples(),):
-            tk.Label(cadre, text=titre, font=POLICE_SOURDINE, fg=COULEUR_TEXTE,
-                     bg=COULEUR_FOND, anchor="w", justify="left",
-                     ).pack(fill="x", pady=(9, 2))
-            corps = tk.Label(cadre, text=texte, font=POLICE_SOURDINE,
-                             fg=COULEUR_SOURDINE, bg=COULEUR_FOND,
-                             anchor="w", justify="left",
-                             wraplength=LARGEUR_APROPOS)
-            corps.pack(fill="x")
-            self.sections.append(corps)
+            tk.Label(self.contenu, text=titre, font=POLICE_SOURDINE,
+                     fg=COULEUR_TEXTE, bg=COULEUR_FOND, anchor="w",
+                     justify="left").pack(fill="x", pady=(9, 2))
+            corps_texte = tk.Label(self.contenu, text=texte, font=POLICE_SOURDINE,
+                                   fg=COULEUR_SOURDINE, bg=COULEUR_FOND,
+                                   anchor="w", justify="left",
+                                   wraplength=LARGEUR_APROPOS)
+            corps_texte.pack(fill="x")
+            self.sections.append(corps_texte)
 
-        tk.Label(cadre, text="amendement n° I-1358 · PLF 2027 · 0,055 €/Go",
-                 font=POLICE_SOURDINE, fg=COULEUR_BORDURE, bg=COULEUR_FOND,
-                 anchor="w").pack(fill="x", pady=(10, 0))
+        self.pied = tk.Label(cadre,
+                             text="amendement n° I-1358 · PLF 2027 · 0,055 €/Go",
+                             font=POLICE_SOURDINE, fg=COULEUR_BORDURE,
+                             bg=COULEUR_FOND, anchor="w")
+        self.pied.pack(fill="x", pady=(8, 0))
 
+        # Molette : Button-4/5 sous X11, delta sous Windows et macOS.
+        self.f.bind("<Button-4>", lambda _e: self._molette(-1))
+        self.f.bind("<Button-5>", lambda _e: self._molette(1))
+        self.f.bind("<MouseWheel>",
+                    lambda e: self._molette(-1 if e.delta > 0 else 1))
+
+        self.f.update_idletasks()
+        self._hauteur_adaptee()
         placer_au_dessus(self.f, widget)
         rendre_deplacable(self.f, cadre, widget._zone)
+
+    # -- défilement -----------------------------------------------------------
+    def _contenu_change(self, _evt=None):
+        self.zone.configure(scrollregion=self.zone.bbox("all"))
+
+    def _elargir_contenu(self, evt):
+        self.zone.itemconfigure(self._fenetre, width=evt.width)
+
+    def _hauteur_adaptee(self):
+        """Borne la hauteur du canevas à la zone utile, barre comprise."""
+        self.f.update_idletasks()
+        _zx, _zy, _zw, zh = self.widget._zone
+        # marges externes, bordure, remplissage, écarts, en-tête et pied
+        marges = (2 * MARGE_BAS + 2 + 16 + 4 + 8
+                  + self.entete.winfo_reqheight()
+                  + self.pied.winfo_reqheight())
+        hauteur_max = max(180, zh - marges)
+        contenu = self.contenu.winfo_reqheight()
+        self._defilable = contenu > hauteur_max
+        self.zone.configure(height=min(contenu, hauteur_max))
+        if self._defilable:
+            self.barre.pack(side="right", fill="y", before=self.zone)
+        else:
+            self.barre.pack_forget()
+            self.zone.yview_moveto(0)
+
+    def _molette(self, pas):
+        """Défile d'une unité ; laisse passer l'événement si rien ne déborde."""
+        if not self._defilable:
+            return None
+        self.zone.yview_scroll(pas, "units")
+        return "break"
 
     def fermer(self):
         self.widget._fermer_apropos()
