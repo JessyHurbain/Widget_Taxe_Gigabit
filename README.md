@@ -22,6 +22,17 @@ compteurs d'octets de la carte réseau et applique une multiplication.
 - Le widget et ses panneaux se déplacent à la souris et restent dans la zone utile de
   l'écran (au-dessus de la barre des tâches ou du Dock).
 
+## Aperçu
+
+![Le widget ancré en bas de l'écran](screenshots/widget.png)
+
+| Détail par jour (`≡`) | À propos (`?`) |
+|---|---|
+| ![Panneau taxe par jour](screenshots/jours.png) | ![Panneau à propos](screenshots/apropos.png) |
+
+*Captures prises sous Linux Mint (X11) avec un historique de démonstration ; le taux
+appliqué est celui de l'amendement, 0,055 €/Go.*
+
 ## À quoi ça sert
 
 Un taux au gigaoctet ne dit rien. « 0,055 €/Go » est un nombre qu'on ne peut pas
