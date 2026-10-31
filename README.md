@@ -242,8 +242,8 @@ Les trois artefacts sont aussi construits automatiquement par la CI
 systèmes et publie une release GitHub avec les fichiers.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 Les binaires ne sont pas signés : Windows SmartScreen et Gatekeeper afficheront un
