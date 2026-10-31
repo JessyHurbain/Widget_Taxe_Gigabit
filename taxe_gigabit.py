@@ -115,6 +115,8 @@ POLICE_SOURDINE = ("Courier", 9)
 POLICE_BOUTON = ("Courier", 10, "bold")
 
 LARGEUR_APROPOS = 520         # px : largeur de repli du texte « à propos »
+PART_ECRAN_PANNEAU = 0.8      # le panneau « à propos » ne dépasse pas cette part
+                              # de la hauteur d'écran ; au-delà, il défile
 
 UNITES = ("o/s ", "Ko/s", "Mo/s", "Go/s")
 
@@ -658,14 +660,21 @@ class PanneauAPropos:
         self.zone.itemconfigure(self._fenetre, width=evt.width)
 
     def _hauteur_adaptee(self):
-        """Borne la hauteur du canevas à la zone utile, barre comprise."""
+        """Borne la hauteur du canevas, barre comprise.
+
+        Deux limites, et la plus contraignante l'emporte : la zone utile
+        mesurée au lancement, et une part de la hauteur d'écran. La seconde
+        rattrape les cas où la première ne décrit plus l'écran réel : moniteur
+        plus petit, résolution changée, ou seconde sortie branchée après coup.
+        """
         self.f.update_idletasks()
         _zx, _zy, _zw, zh = self.widget._zone
         # marges externes, bordure, remplissage, écarts, en-tête et pied
         marges = (2 * MARGE_BAS + 2 + 16 + 4 + 8
                   + self.entete.winfo_reqheight()
                   + self.pied.winfo_reqheight())
-        hauteur_max = max(180, zh - marges)
+        plafond = min(zh, int(self.f.winfo_screenheight() * PART_ECRAN_PANNEAU))
+        hauteur_max = max(180, plafond - marges)
         contenu = self.contenu.winfo_reqheight()
         self._defilable = contenu > hauteur_max
         self.zone.configure(height=min(contenu, hauteur_max))
@@ -783,6 +792,7 @@ class TaxeGigabit:
             self._panneau_ferme()
             return
         self._fermer_apropos()                  # un seul panneau à la fois
+        self._rafraichir_zone()
         self.panneau = PanneauJours(self)
 
     def _basculer_apropos(self):
@@ -790,7 +800,15 @@ class TaxeGigabit:
             self._fermer_apropos()
             return
         self._panneau_ferme()
+        self._rafraichir_zone()
         self.a_propos = PanneauAPropos(self)
+
+    def _rafraichir_zone(self):
+        """Relit la zone utile : moniteur branché, résolution changée, écran
+        dupliqué depuis le lancement."""
+        zone = zone_utile(self.racine)
+        if zone != self._zone:
+            self._zone = zone
 
     def _panneau_ferme(self):
         if self.panneau is not None:
