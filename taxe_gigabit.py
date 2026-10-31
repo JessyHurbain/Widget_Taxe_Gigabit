@@ -51,6 +51,7 @@ from datetime import date
 try:
     import tkinter as tk
     from tkinter import font as tkfont
+    from tkinter import messagebox
 except ImportError:                     # Tk absent : message utile par système
     sys.exit(
         "Tkinter est requis.\n"
@@ -522,16 +523,29 @@ def charger_jours() -> dict[str, int]:
     return jours
 
 
-def enregistrer_jours(jours: dict[str, int]) -> None:
+def enregistrer_jours(jours: dict[str, int], position=None) -> None:
     """Écriture atomique : un plantage ne laisse pas un fichier tronqué."""
     dossier = os.path.dirname(FICHIER_ETAT)
     if dossier:
         os.makedirs(dossier, exist_ok=True)
+    donnees = {"version": 1, "jours": jours}
+    if position is not None:
+        donnees["position"] = [int(position[0]), int(position[1])]
     temporaire = FICHIER_ETAT + ".tmp"
     with open(temporaire, "w", encoding="utf-8") as flux:
-        json.dump({"version": 1, "jours": jours}, flux,
-                  ensure_ascii=False, indent=1, sort_keys=True)
+        json.dump(donnees, flux, ensure_ascii=False, indent=1, sort_keys=True)
     os.replace(temporaire, FICHIER_ETAT)       # atomique aussi sous Windows
+
+
+def charger_position() -> tuple[int, int] | None:
+    """Dernière position choisie à la souris, None si absente ou illisible."""
+    try:
+        with open(FICHIER_ETAT, encoding="utf-8") as flux:
+            brut = json.load(flux).get("position")
+        x, y = int(brut[0]), int(brut[1])
+    except (OSError, ValueError, TypeError, IndexError, AttributeError, KeyError):
+        return None
+    return (x, y)
 
 
 EXEMPLES = (
@@ -599,6 +613,8 @@ class PanneauJours:
         self.lbl_pied = tk.Label(cadre, text="", font=POLICE_SOURDINE,
                                  fg=COULEUR_TEXTE, bg=COULEUR_FOND, anchor="w")
         self.lbl_pied.pack(fill="x", pady=(6, 0))
+        bouton_plat(cadre, " réinitialiser le cumul ", self._reinitialiser,
+                    COULEUR_SOURDINE).pack(anchor="e", pady=(4, 0))
 
         self.rafraichir()
         placer_au_dessus(self.f, widget)
@@ -630,6 +646,18 @@ class PanneauJours:
 
     def fermer(self):
         self.widget._panneau_ferme()
+
+    def _reinitialiser(self):
+        """Efface l'historique après confirmation : action irréversible."""
+        if not messagebox.askyesno(
+            "Réinitialiser le cumul",
+            "Effacer tous les jours mesurés ? Cette action est irréversible.",
+            parent=self.f,
+        ):
+            return
+        self.widget.jours.clear()
+        self.widget._sauvegarder()
+        self.rafraichir()
 
 
 # =============================================================================
@@ -799,7 +827,7 @@ class TaxeGigabit:
                                           else (None, None))
         self.prev_t = time.monotonic()
         self._taille = None
-        self._pos_manuelle = None   # (x, y) choisi à la souris, None = ancrage auto
+        self._pos_manuelle = charger_position()   # None = ancrage auto
         self._drag = None           # décalage curseur/fenêtre pendant un glissement
 
         self._construire()
@@ -947,7 +975,7 @@ class TaxeGigabit:
     # -- mémoire --------------------------------------------------------------
     def _sauvegarder(self):
         try:
-            enregistrer_jours(self.jours)
+            enregistrer_jours(self.jours, self._pos_manuelle)
         except OSError:
             pass                       # disque plein / droits : on n'interrompt pas
         self._derniere_sauvegarde = time.monotonic()

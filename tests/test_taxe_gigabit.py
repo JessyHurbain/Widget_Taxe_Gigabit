@@ -124,3 +124,26 @@ def test_enregistrement_cree_le_dossier(etat):
     tg.FICHIER_ETAT = str(etat.parent / "sous-dossier" / "etat.json")
     tg.enregistrer_jours({"2026-10-31": 1})
     assert tg.charger_jours() == {"2026-10-31": 1}
+
+
+# -- position mémorisée -------------------------------------------------------
+
+def test_position_aller_retour(etat):
+    tg.enregistrer_jours({"2026-10-31": 1}, (1600, 131))
+    assert tg.charger_position() == (1600, 131)
+
+
+def test_position_absente_donne_none(etat):
+    tg.enregistrer_jours({"2026-10-31": 1})
+    assert tg.charger_position() is None
+
+
+def test_position_corrompue_donne_none(etat):
+    etat.write_text('{"jours": {}, "position": "n\'importe quoi"}', encoding="utf-8")
+    assert tg.charger_position() is None
+
+
+def test_position_n_efface_pas_les_jours(etat):
+    """Sauver la position ne doit jamais perdre l'historique."""
+    tg.enregistrer_jours({"2026-10-31": 7}, (10, 20))
+    assert tg.charger_jours() == {"2026-10-31": 7}
