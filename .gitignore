@@ -2,3 +2,9 @@ __pycache__/
 *.py[cod]
 *.tmp
 .venv/
+
+# artefacts de compilation
+.build-venv/
+build/
+dist/
+*.spec

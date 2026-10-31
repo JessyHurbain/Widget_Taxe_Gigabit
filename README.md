@@ -202,6 +202,35 @@ Tout est regroupé en tête de `taxe_gigabit.py`.
 Le texte du panneau `?` est dans la constante `APROPOS` ; les exemples chiffrés dans
 `EXEMPLES`, et ils sont recalculés au taux courant.
 
+## Build et release
+
+Le widget se lance directement en Python, mais des binaires autonomes sont produits
+pour les trois systèmes.
+
+| Système | Commande | Artefact |
+|---|---|---|
+| Linux | `./build.sh` | `dist/TaxeGigabit-linux-<arch>.tar.gz` |
+| macOS | `./build.sh` | `dist/TaxeGigabit-macos-<arch>.zip` (contient `TaxeGigabit.app`) |
+| Windows | `build.bat` | `dist\TaxeGigabit.exe` |
+
+Chaque script crée un environnement `.build-venv`, y installe PyInstaller et psutil,
+puis compile en un seul fichier (`--onefile --windowed`). PyInstaller ne fait pas de
+compilation croisée : un binaire Windows se produit sous Windows, un binaire macOS
+sous macOS.
+
+Les trois artefacts sont aussi construits automatiquement par la CI
+(`.github/workflows/release.yml`) : pousser un tag de version compile les trois
+systèmes et publie une release GitHub avec les fichiers.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Les binaires ne sont pas signés : Windows SmartScreen et Gatekeeper afficheront un
+avertissement. Sous macOS, ouvrir par clic droit → « Ouvrir », ou lever la quarantaine :
+`xattr -d com.apple.quarantine TaxeGigabit.app`.
+
 ## Limites connues
 
 - **Ce n'est pas le calcul de la taxe réelle.** L'assiette légale est mesurée par les
