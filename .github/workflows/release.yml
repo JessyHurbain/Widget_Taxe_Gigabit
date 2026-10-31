@@ -22,7 +22,8 @@ jobs:
           /tmp/venv/bin/pip install --upgrade pip
           /tmp/venv/bin/pip install pyinstaller psutil
           /tmp/venv/bin/python -m PyInstaller --noconfirm --clean --onefile \
-            --windowed --name TaxeGigabit taxe_gigabit.py
+            --windowed --name TaxeGigabit \
+            --add-data assets/logo.png:assets taxe_gigabit.py
           tar -czf TaxeGigabit-linux-x86_64.tar.gz -C dist TaxeGigabit
       - uses: actions/upload-artifact@v4
         with:
@@ -41,7 +42,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller psutil
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit taxe_gigabit.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit --icon assets/logo.ico --add-data "assets/logo.png;assets" taxe_gigabit.py
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -59,7 +60,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller psutil
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit taxe_gigabit.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit --icon assets/logo.icns --add-data assets/logo.png:assets taxe_gigabit.py
       - name: Empaqueter le .app
         run: ditto -c -k --keepParent dist/TaxeGigabit.app TaxeGigabit-macos-arm64.zip
       - uses: actions/upload-artifact@v4

@@ -17,7 +17,8 @@ python -m pip install --quiet --upgrade pyinstaller psutil || goto :erreur
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit taxe_gigabit.py || goto :erreur
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name TaxeGigabit ^
+  --icon assets\logo.ico --add-data "assets\logo.png;assets" taxe_gigabit.py || goto :erreur
 
 echo.
 echo Termine : dist\TaxeGigabit.exe

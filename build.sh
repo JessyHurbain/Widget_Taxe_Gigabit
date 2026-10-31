@@ -19,8 +19,21 @@ python -m pip install --quiet --upgrade pip
 python -m pip install --quiet --upgrade pyinstaller psutil
 
 rm -rf build dist
+
+case "$(uname -s)" in
+  Darwin)
+    ICONE="--icon assets/logo.icns"
+    ;;
+  *)
+    ICONE=""                        # Linux : l'icône vient du .desktop, pas du binaire
+    ;;
+esac
+
+# Variables volontairement non quotées : elles contiennent des options.
+# shellcheck disable=SC2086
 python -m PyInstaller --noconfirm --clean --onefile --windowed \
-  --name TaxeGigabit taxe_gigabit.py
+  --name TaxeGigabit $ICONE \
+  --add-data assets/logo.png:assets taxe_gigabit.py
 
 case "$(uname -s)" in
   Darwin)

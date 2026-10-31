@@ -297,6 +297,22 @@ def dossier_etat() -> str:
 FICHIER_ETAT = os.path.join(dossier_etat(), "etat.json")
 
 
+def chemin_ressource(nom_relatif: str) -> str:
+    """Chemin d'un fichier joint, y compris dans un binaire PyInstaller (onefile)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, nom_relatif)
+
+
+def appliquer_icone(racine: tk.Tk) -> None:
+    """Icône de fenêtre et de barre des tâches, si le fichier est présent."""
+    try:
+        image = tk.PhotoImage(file=chemin_ressource("assets/logo.png"))
+    except (tk.TclError, OSError):
+        return                          # lancé sans le dossier assets : on continue
+    racine.iconphoto(True, image)       # True : s'applique aussi aux Toplevel
+    racine._icone = image               # garder une référence, sinon Tk l'oublie
+
+
 def bouton_plat(parent: tk.Widget, texte: str, commande,
                 couleur_survol: str = COULEUR_TEXTE) -> tk.Label:
     """Bouton plat en Label : même rendu sombre sur Linux, macOS et Windows."""
@@ -787,6 +803,8 @@ class TaxeGigabit:
 def main():
     activer_dpi()
     racine = tk.Tk()
+    racine.title("TaxeGigabit")
+    appliquer_icone(racine)
     widget = TaxeGigabit(racine)
     try:
         racine.mainloop()
